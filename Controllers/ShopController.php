@@ -220,5 +220,85 @@ class ShopController {
             echo json_encode(['statut' => false, 'message' => 'Failed to delete shop']);
         }
     }
+
+    /**
+     * Vérifie si un film se trouve dans les boutiques de l'utilisateur connecté
+     * @param array $params - Paramètres de la route
+     */
+    public function getMoviesInShop($params) {
+        $movieId = $params['id'] ?? null;
+        $userId = $_SESSION['id'] ?? null;
+
+        if (!$movieId || !$userId) {
+            echo json_encode(['statut' => false, 'message' => 'Missing movie ID or user ID']);
+            return;
+        }
+
+        $bdd = GetPDO::getpdo();
+
+        // Récupérer les ID des boutiques de l'utilisateur
+        $query = $bdd->prepare('SELECT id FROM shops WHERE auth = ?');
+        $query->execute([$userId]);
+        $shops = $query->fetchAll();
+
+        $formattedResults = []; 
+        foreach ($shops as $shop) {
+            
+            $sq = $bdd->prepare('SELECT address FROM shop_movies WHERE shop_id = ? AND movie_id = ?');
+            $sq->execute([$shop['id'], $movieId]); 
+            $movieAdress = $sq->fetch();
+
+            if ($movieAdress) {
+                $formattedResults[$shop['id']] = [ 
+                    'exist' => true,
+                    'path' => $movieAdress['address'] ?? ""
+                ];
+            }else {
+                $formattedResults[$shop['id']] = [ 
+                    'exist' => false,
+                    'path' => ""
+                ];
+            }
+        }  
+        echo json_encode($formattedResults);
+    }
+
+    public function updateShopPath()
+    {
+        $movieId = $_GET['movie'] ?? null; 
+        $address = $_GET['address'] ?? null; 
+        $shopId = $_GET['shop'] ?? null; 
+
+        if (!$movieId || !$shopId) {
+            echo json_encode(['statut' => false, 'message' => 'Missing movie ID or shop ID']);
+            return;
+        }
+
+        $bdd = GetPDO::getpdo();
+        if (!$address || $address === '') {
+            //delete movie from this shop
+            $query = $bdd->prepare('DELETE FROM shop_movies WHERE shop_id = ? AND movie_id = ?');
+            $query->execute([$shopId, $movieId]);
+            echo json_encode(['statut' => true, 'message' => 'Movie removed from shop successfully']);
+            return;
+        }
+
+        // count if movie exist in this shop
+        $query = $bdd->prepare('SELECT id FROM shop_movies WHERE shop_id = ? AND movie_id = ?');
+        $query->execute([$shopId, $movieId]);
+        $shopMovie = $query->fetch();
+        if ($shopMovie) {
+            # update path
+            $query = $bdd->prepare('UPDATE shop_movies SET address = ? WHERE shop_id = ? AND movie_id = ?');
+            $query->execute([$address, $shopId, $movieId]);
+            echo json_encode(['statut' => true, 'message' => 'Movie path updated successfully']);
+        } else {
+            # add movie to shop
+            $query = $bdd->prepare('INSERT INTO shop_movies (shop_id, movie_id, added_at, address) VALUES (?, ?, ?, ?)');
+            $query->execute([$shopId, $movieId, date('Y-m-d'), $address]);
+            echo json_encode(['statut' => true, 'message' => 'Movie added to shop successfully']);
+            return;
+        } 
+    }
 }
 ?>

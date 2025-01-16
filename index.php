@@ -21,6 +21,9 @@ session_start();
 set_error_handler('Controllers\Errors::error');
 set_exception_handler('Controllers\Errors::error');  */
 
+$_SESSION["id"] = 1;//a supprimmer
+
+
 $routeur 
     // path, class@methode, name
     ->get("/api/search","Search@search","search")
@@ -39,6 +42,9 @@ $routeur
     ->get("/api/get-user-shops","ShopController@getShops","getUserShops")
     ->get("/api/movies","MovieController@getMovies","getMovies")
     ->get("/api/movie/[i:id]","MovieController@getMovieById","getMovieById")
+    ->get("/api/get-movies-in-shop/[i:id]","ShopController@getMoviesInShop","getMoviesInShop")
+    ->get("/api/update-shop-path","ShopController@updateShopPath","updateShopPath")
+    ->get("/api/get-history","MovieController@getHistory","getHistory")
     ->post("/api/register","UserController@register","register")
     ->post("/api/confirm","UserController@confirm","confirm")
     ->post("/api/login","UserController@login","login")
