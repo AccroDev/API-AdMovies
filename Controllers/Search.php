@@ -4,6 +4,7 @@ namespace Controllers;
 use Models\GetPDO;
 use TeamTNT\TNTSearch\TNTSearch;
 use Dotenv\Dotenv;
+use Error;
 
 class Search {
     private $tnt;
@@ -71,7 +72,9 @@ class Search {
      * Recherche avec TNTSearch
      * @param string $query - La requête de recherche
      */
-    private function tntSearch($query) {
+    private function tntSearch($query) { 
+        $userId = $_SESSION['id'] ?? null;
+
         $this->tnt->selectIndex('movie.index');
         $searchResp = $this->tnt->search($query);
 
@@ -79,27 +82,49 @@ class Search {
         $ids = implode(',', $searchResp['ids']);
         
         if (!empty($ids)) {
-            $request = $bdd->query("SELECT id, titre, miniature, contenu, date FROM movies WHERE id IN ($ids) ORDER BY FIELD(id, $ids)");
+            $request = $bdd->query("SELECT id, titre, miniature, contenu, source, date FROM movies WHERE id IN ($ids) ORDER BY FIELD(id, $ids)");
             $results = $request->fetchAll();
         } else {
             $results = [];
         }
 
-        $firstQuery = $bdd->prepare('SELECT id, titre, miniature, contenu, date FROM movies WHERE MATCH(titre, contenu, description) AGAINST (:query IN NATURAL LANGUAGE MODE)'); 
+        $firstQuery = $bdd->prepare('SELECT id, titre, miniature, contenu, source, date FROM movies WHERE MATCH(titre, contenu, description) AGAINST (:query IN NATURAL LANGUAGE MODE)'); 
         $firstQuery->execute(['query' => $query]);
         $fullTextResults = $firstQuery->fetchAll();
 
         $combinedResults = array_merge($results, $fullTextResults);
 
+        $threeMonthsAgo = time() - (3 * 30 * 24 * 60 * 60); // Timestamp pour trois mois
+
         $formattedResults = [];
         foreach ($combinedResults as $result) {
             $contenu = json_decode($result['contenu'], true);
+
+            // Récupérer le nombre de votes durant les 3 derniers mois
+            $likeCountQuery = $bdd->prepare('SELECT COUNT(*) as vote_count FROM votes WHERE movie_id = ? AND date >= ?');
+            $likeCountQuery->execute([$result['id'], $threeMonthsAgo]);
+            $likeCount = $likeCountQuery->fetchColumn();
+
+            // Récupérer le nombre total de votes
+            $totalLikeQuery = $bdd->prepare('SELECT COUNT(*) as total_vote_count FROM votes WHERE movie_id = ?');
+            $totalLikeQuery->execute([$result['id']]);
+            $totalLike = $totalLikeQuery->fetchColumn();
+
+            // Vérifier si l'utilisateur actuel a voté pour cette série durant les 3 derniers mois
+            $userLikeQuery = $bdd->prepare('SELECT COUNT(*) as user_vote_count FROM votes WHERE movie_id = ? AND user_id = ? AND date >= ?');
+            $userLikeQuery->execute([$result['id'], $userId, $threeMonthsAgo]);
+            $userLike = $userLikeQuery->fetchColumn() > 0;
+
             $formattedResults[] = [
                 'id' => $result['id'],
                 'titre' => $result['titre'],
                 'miniature' => $result['miniature'],
                 'vote' => $contenu['vote_average'],
-                'date' => $result['date']
+                'date' => $result['date'],
+                "idTmdb" => $result['source'],
+                'like' => $userLike,
+                'likeCount' => (int) $likeCount,
+                'totLike' => (int) $totalLike
             ];
         }
 
@@ -113,35 +138,59 @@ class Search {
      * La clé `found` peut être présente dans $_GET.
      * - `found` : Un tableau JSON contenant des IDs de films déjà trouvés. Ces IDs seront exclus des résultats de recherche.
      */
-    private function fullTextSearch($query) {
+    private function fullTextSearch($query) { 
+        $userId = $_SESSION['id'] ?? null;
+
         $bdd = GetPDO::getpdo();
         
         // Utiliser LIKE de SQL
-        $firstQuery = $bdd->prepare('SELECT id, titre, miniature, contenu, date FROM movies WHERE (titre LIKE :query OR description LIKE :query OR contenu LIKE :query)');
+        $firstQuery = $bdd->prepare('SELECT id, titre, miniature, contenu, source, date FROM movies WHERE (titre LIKE :query OR description LIKE :query OR contenu LIKE :query)');
         $firstQuery->execute(['query' => '%' . $query . '%']);
         $likeResults = $firstQuery->fetchAll(); 
 
         // Utiliser MATCH AGAINST avec un mode de recherche étendu
-        $secondQuery = $bdd->prepare('SELECT id, titre, miniature, contenu, date FROM movies WHERE MATCH(titre, contenu, description) AGAINST (:query IN NATURAL LANGUAGE MODE WITH QUERY EXPANSION)');
+        $secondQuery = $bdd->prepare('SELECT id, titre, miniature, contenu, source, date FROM movies WHERE MATCH(titre, contenu, description) AGAINST (:query IN NATURAL LANGUAGE MODE WITH QUERY EXPANSION)');
         $secondQuery->execute(['query' => $query]);
         $matchResults = $secondQuery->fetchAll();
 
         $combinedResults = array_merge($likeResults, $matchResults);
 
-        $foundIds = $_GET['found'] && json_decode($_GET['found'], true) ? json_decode($_GET['found'], true) : []; 
+        $foundIds = isset($_GET['found']) && json_decode($_GET['found'], true) ? json_decode($_GET['found'], true) : []; 
         $filteredResults = array_filter($combinedResults, function($result) use ($foundIds) {
             return !in_array($result['id'], $foundIds);
         });
 
+        $threeMonthsAgo = time() - (3 * 30 * 24 * 60 * 60); // Timestamp pour trois mois
+
         $formattedResults = [];
         foreach ($filteredResults as $result) {
             $contenu = json_decode($result['contenu'], true);
+
+            // Récupérer le nombre de votes durant les 3 derniers mois
+            $likeCountQuery = $bdd->prepare('SELECT COUNT(*) as vote_count FROM votes WHERE movie_id = ? AND date >= ?');
+            $likeCountQuery->execute([$result['id'], $threeMonthsAgo]);
+            $likeCount = $likeCountQuery->fetchColumn();
+
+            // Récupérer le nombre total de votes
+            $totalLikeQuery = $bdd->prepare('SELECT COUNT(*) as total_vote_count FROM votes WHERE movie_id = ?');
+            $totalLikeQuery->execute([$result['id']]);
+            $totalLike = $totalLikeQuery->fetchColumn();
+
+            // Vérifier si l'utilisateur actuel a voté pour cette série durant les 3 derniers mois
+            $userLikeQuery = $bdd->prepare('SELECT COUNT(*) as user_vote_count FROM votes WHERE movie_id = ? AND user_id = ? AND date >= ?');
+            $userLikeQuery->execute([$result['id'], $userId, $threeMonthsAgo]);
+            $userLike = $userLikeQuery->fetchColumn() > 0;
+
             $formattedResults[] = [
                 'id' => $result['id'],
                 'titre' => $result['titre'],
                 'miniature' => $result['miniature'],
                 'vote' => $contenu['vote_average'],
-                'date' => $result['date']
+                'date' => $result['date'],
+                "idTmdb" => $result['source'],
+                'like' => $userLike,
+                'likeCount' => (int) $likeCount,
+                'totLike' => (int) $totalLike
             ];
         }
 
@@ -163,8 +212,9 @@ class Search {
         curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, 0);
         curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, 0);
         $response = curl_exec($curl);
-        if ($response === false) {
-            return ['error' => 'Erreur lors de la requête cURL: ' . curl_error($curl)];
+        if ($response === false) {  
+            echo json_encode([]);
+            return; 
         }
         curl_close($curl);
 
@@ -173,7 +223,7 @@ class Search {
 
         $foundIds = $_GET['found'] && json_decode($_GET['found'], true) ? json_decode($_GET['found'], true) : []; 
         foreach ($results as $result) {
-            if (!in_array($result['id'], $foundIds)) {
+            if (!in_array($result['id'], $foundIds) && isset($result['backdrop_path'])) {
                 $formattedResults[] = [
                     'id' => $result['id'],
                     'titre' => $result['title'] ?? $result['name'],
@@ -181,11 +231,12 @@ class Search {
                     'description' => $result['overview'],
                     'vote' => $result['vote_average'],
                     'date' => $result['release_date'] ?? $result['first_air_date'],
-                    'type' => $result['media_type']
+                    'type' => $result['media_type'] ?? "movie",
+                    
                 ];
             }
-        }
-
+        } 
+        
         echo json_encode($formattedResults);
     }
 

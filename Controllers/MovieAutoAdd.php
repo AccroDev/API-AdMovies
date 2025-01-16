@@ -3,11 +3,28 @@ namespace Controllers;
 
 use Models\GetPDO;
 use Dotenv\Dotenv;
+use PDO;
+use TeamTNT\TNTSearch\TNTSearch;
 
 class MovieAutoAdd {
+    private $tnt;
+
     public function __construct() {
         $dotenv = Dotenv::createImmutable(dirname(__DIR__));
         $dotenv->load();
+
+        // Configuration de TNTSearch
+        $config = [
+            'driver'    => 'mysql',
+            'host'      => $_ENV['DB_HOST'],
+            'database'  => $_ENV['DB_NAME'],
+            'username'  => $_ENV['DB_USER'],
+            'password'  => $_ENV['DB_PASS'],
+            'storage'   => dirname(__DIR__).DIRECTORY_SEPARATOR.'Models'.DIRECTORY_SEPARATOR.'indexs'.DIRECTORY_SEPARATOR,
+            'stemmer'   => \TeamTNT\TNTSearch\Stemmer\PorterStemmer::class // optionnel
+        ]; 
+        $this->tnt = new TNTSearch();
+        $this->tnt->loadConfig($config);
     }
 
     public function addMovie() {
@@ -60,7 +77,7 @@ class MovieAutoAdd {
             $movieData['release_date'] ?? $movieData['first_air_date'],
             date('Y-m-d H:i:s'),
             json_encode($movieData),
-            'admin', // Assuming 'admin' as the author
+            isset($_SESSION["id"]) ?? 'admin', // Assuming 'admin' as the author
             $category,
             1, 
             'https://image.tmdb.org/t/p/w342' . $movieData['backdrop_path'],
@@ -69,11 +86,42 @@ class MovieAutoAdd {
             $movieData['overview']
         ]);
 
-        if ($result) {
+        if ($result) {  
             echo json_encode(['statut' => true]);
         } else {
             echo json_encode(['statut' => false , 'message' => 'Failed to add movie']);
         }
+    }
+
+    public function insertTNTindex () 
+    {
+        $tntID = $_GET['tntID'] ?? null; 
+
+        if (!$tntID) {
+            echo json_encode(['statut' => false, 'message' => 'Missing tnt ID']);
+            return;
+        } 
+
+        $bdd = GetPDO::getpdo();
+        $checkQuery = $bdd->prepare('SELECT id, titre, description, contenu FROM movies WHERE source = ?');
+        $checkQuery->execute([$tntID]); 
+        $movieData = $checkQuery->fetch(PDO::FETCH_ASSOC);
+
+        if (!$movieData) {
+            echo json_encode(['statut' => false, 'message' => 'Movie not found']);
+            return;
+        }
+
+        $this->tnt->selectIndex('movie.index');
+        $indexer = $this->tnt->getIndex();
+        $indexer->insert([
+            'id' => $movieData['id'],
+            'titre' => $movieData['titre'],
+            'description' => $movieData['description'],
+            'contenu' => $movieData['contenu']
+        ]); 
+        echo json_encode(['statut' => true]);
+
     }
 }
 ?>

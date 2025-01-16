@@ -14,7 +14,7 @@ class ShopController {
      * Crée une boutique de transfert des films
      */
     public function createShop() {
-        session_start();
+        
         $userId = $_SESSION['id'] ?? null;
 
         if (!$userId) {
@@ -146,20 +146,34 @@ class ShopController {
      * Récupère toutes les boutiques d'un utilisateur
      */
     public function getShops() {
-        session_start();
+        
         $userId = $_SESSION['id'] ?? null;
 
         if (!$userId) {
-            echo json_encode(['statut' => false, 'message' => 'Please log in']);
+            //echo json_encode(['statut' => false, 'message' => 'Please log in']);
+            echo json_encode([]);
             return;
         }
 
         $bdd = GetPDO::getpdo();
-        $query = $bdd->prepare('SELECT id, name, miniature, ville, phone_number, address, date FROM shops WHERE auth = ?');
+        $query = $bdd->prepare('SELECT * FROM shops WHERE auth = ?');
         $query->execute([$userId]);
         $shops = $query->fetchAll();
 
-        echo json_encode($shops);
+        $allShops = [];
+        foreach ($shops as $shop) {
+            $allShops[] = [
+                'id' => $shop['id'],
+                'name' => $shop['name'],
+                'miniature' => '/Views/img/shops/' . $shop['miniature'],
+                'ville' => $shop['ville'],
+                'phone_number' => $shop['phone_number'],
+                'address' => $shop['address'],
+                'date' => date('d-m-Y', strtotime($shop['date']))
+            ];
+        }
+
+        echo json_encode($allShops);
     }
 
     /**
@@ -183,6 +197,28 @@ class ShopController {
         $shops = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         echo json_encode($shops);
+    }
+
+    /**
+     * Supprime une boutique
+     */
+    public function deleteShop() {
+        $shopId = $_POST['shop_id'] ?? null;
+
+        if (!$shopId) {
+            echo json_encode(['statut' => false, 'message' => 'Missing shop ID']);
+            return;
+        }
+
+        $bdd = GetPDO::getpdo();
+        $deleteQuery = $bdd->prepare('DELETE FROM shops WHERE id = ?');
+        $result = $deleteQuery->execute([$shopId]);
+
+        if ($result) {
+            echo json_encode(['statut' => true, 'message' => 'Shop deleted successfully']);
+        } else {
+            echo json_encode(['statut' => false, 'message' => 'Failed to delete shop']);
+        }
     }
 }
 ?>

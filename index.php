@@ -3,37 +3,48 @@
 use Controllers\Router;
 use Controllers\UserController;
 use Dotenv\Dotenv;
-
 require "vendor/autoload.php";
 
 // Charger les variables d'environnement
 $dotenv = Dotenv::createImmutable(__DIR__);
 $dotenv->load();
+header("Access-Control-Allow-Origin: *");
 
 // Vérifier les cookies et connecter l'utilisateur automatiquement
 $userController = new UserController();
 $userController->autoLogin();
 
 $routeur = new Router("Controllers");
+session_start();  
+
+/* error_reporting(E_ALL);
+set_error_handler('Controllers\Errors::error');
+set_exception_handler('Controllers\Errors::error');  */
 
 $routeur 
     // path, class@methode, name
-    ->get("/search","Search@search","search")
-    ->get("/add-movie","MovieAutoAdd@addMovie","addMovie")
-    ->get("/create-index","Search@createIndex","createIndex")
-    ->get("/vote/[i:id]","SeriesVote@voteOrDevote","voteOrDevote")
-    ->get("/top-recommended","SeriesVote@getTopRecommended","topRecommended")
-    ->get("/addShopMovie","ShopController@addShopMovie","addShopMovie")
-    ->post("/create-shop","ShopController@createShop","createShop")
+    ->get("/api/search","Search@search","search")
+    ->get("/api/add-movie","MovieAutoAdd@addMovie","addMovie")
+    ->get("/api/tntAdd","MovieAutoAdd@insertTNTindex","insertTNTindex")
+    ->get("/api/create-index","Search@createIndex","createIndex")
+    ->get("/api/vote/[i:id]","SeriesVote@voteOrDevote","voteOrDevote")
+    ->get("/api/top-recommended","SeriesVote@getTopRecommended","topRecommended")
+    ->get("/api/addShopMovie","ShopController@addShopMovie","addShopMovie")
+    ->post("/api/create-shop","ShopController@createShop","createShop")
     //get movie from shop
-    ->get("/get/[i:id]","ShopController@getShopMovies","getShopMovies")
+    ->get("/api/get/[i:id]","ShopController@getShopMovies","getShopMovies")
     //get all shops of one user
-    ->get("/get-shops","ShopController@getShops","getShops")
+    ->get("/api/get-shops","ShopController@getShops","getShops")
     //get all shops of one user
-    ->get("/get-user-shops","ShopController@getUserShops","getUserShops")
-    ->post("/register","UserController@register","register")
-    ->post("/confirm","UserController@confirm","confirm")
-    ->post("/login","UserController@login","login")
-    ->get("/logout","UserController@logout","logout")
+    ->get("/api/get-user-shops","ShopController@getShops","getUserShops")
+    ->get("/api/movies","MovieController@getMovies","getMovies")
+    ->get("/api/movie/[i:id]","MovieController@getMovieById","getMovieById")
+    ->post("/api/register","UserController@register","register")
+    ->post("/api/confirm","UserController@confirm","confirm")
+    ->post("/api/login","UserController@login","login")
+    ->post("/api/forgot-password","UserController@forgotPassword","forgotPassword")
+    ->post("/api/reset-password","UserController@resetPassword","resetPassword")
+    ->post("/api/delete-shop","ShopController@deleteShop","deleteShop")
+    ->post("/api/logout","UserController@logout","logout")
     ->run();
 ?>
