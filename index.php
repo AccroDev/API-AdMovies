@@ -21,7 +21,7 @@ session_start();
 set_error_handler('Controllers\Errors::error');
 set_exception_handler('Controllers\Errors::error');  */
 
-$_SESSION["id"] = 1;//a supprimmer
+$_SESSION["id"] = 2;//a supprimmer
 
 
 $routeur 
