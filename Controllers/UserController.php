@@ -42,14 +42,26 @@ class UserController {
         ));
         $response = curl_exec($curl);
         curl_close($curl);
-        $response = json_decode($response);
-        var_dump($response); 
-
-        if($response->statut == false){
-            echo json_encode(['statut' => false, 'message' => 'Invalid email or password']);
+        $response = json_decode($response,true);
+   
+        //if status == true  ==> if the user is registered
+        if($response['statut'] == true){
+            $_SESSION["id"]= $response['data']['id'];
+            $_SESSION["name"]= $response['data']['name'];
+            $_SESSION["email"]= $response['data']['email'];
+            $_SESSION["accreditation"]= $response['data']['accreditation'];
+            $_SESSION["avatar"]= $response['data']['avatar'];
+            $_SESSION["pays"]= $response['data']['pays'];
+            $_SESSION["devise"]= $response['data']['devise'];
+            echo json_encode($response);
+            var_dump($_SESSION);
             return;
         }
-
+        //if status == false  ==> if the user email already exists,400: Champs requis manquants, 500: Erreur interne du serveur,500: Erreur interne du serveur
+        if($response['statut'] == false){
+            echo json_encode($response);
+            return;
+        }
  
     }
 
@@ -115,40 +127,52 @@ class UserController {
         $password = $_POST['password'] ?? null;
 
         if (!$email || !$password) {
-            echo json_encode(['statut' => false, 'message' => 'Missing email or password']);
+            echo json_encode(['statut' => false, 'message' => 'Missing required fields',"code"=> 400]);
             return;
         }
 
-        $bdd = GetPDO::getpdo();
-        $query = $bdd->prepare('SELECT * FROM users WHERE email = ?');
-        $query->execute([$email]);
-        $user = $query->fetch(); 
+        // request curl to http://accrodev/api/login in post for signin
 
-        if (!$user || !password_verify($password, $user['password'])) {
-            echo json_encode(['statut' => false, 'message' => 'Invalid email or password']);
-            return;
+        $curl = curl_init();
+        curl_setopt_array($curl, array(
+            CURLOPT_URL => $_ENV["AUTH_HOST"] .  "/api/login" ,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING => "",
+            CURLOPT_MAXREDIRS => 10,
+            CURLOPT_TIMEOUT => 0,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST => "POST",
+            CURLOPT_POSTFIELDS => "email=$email&password=$password",
+            CURLOPT_HTTPHEADER => array(
+                "Content-Type: application/x-www-form-urlencoded"
+            ),
+        ));
+        $response = curl_exec($curl);
+        curl_close($curl);
+        $response = json_decode($response,true);
+        
+            
+       
+        
+        if( $response['statut'] == true){
+            $user = $response['data']; 
+            // Ajouter les données personnelles dans la session 
+            $_SESSION['id'] = $user['id'];
+            $_SESSION['name'] = $user['name'];
+            $_SESSION['email'] = $user['email'];
+            $_SESSION['accreditation'] = $user['accreditation'];
+
+            // Ajouter l'email et le mot de passe dans les cookies
+            setcookie('email', $email, time() + (86400 * 30), "/"); // 30 jours
+            setcookie('password', $password, time() + (86400 * 30), "/"); // 30 jours
+            echo json_encode($response);
+         
         }
-
-        // Ajouter les données personnelles dans la session 
-        $_SESSION['id'] = $user['id'];
-        $_SESSION['name'] = $user['name'];
-        $_SESSION['email'] = $user['email'];
-        $_SESSION['accreditation'] = $user['accreditation'];
-
-        // Ajouter l'email et le mot de passe dans les cookies
-        setcookie('email', $email, time() + (86400 * 30), "/"); // 30 jours
-        setcookie('password', $password, time() + (86400 * 30), "/"); // 30 jours
-
-        echo json_encode([
-            'statut' => true, 
-            'message' => 'User logged in successfully',
-            "id" => $user["id"],
-            "name" => $user["name"],
-            "email" => $user["email"],
-            "accreditation" => $user["accreditation"], 
-            "date" => date("d-m-Y", strtotime($user["date"])),  
-            "avatar" => $user["avatar"] && $user["avatar"] !== '' ? $user["avatar"] : '/Views/img/avatar/avatar.jpg'
-        ]);
+        
+        if($response['code']==404){
+            echo json_encode(['statut' => false, 'message' => 'User not found',"code"=>  404]);
+        }
     }
 
     /**
