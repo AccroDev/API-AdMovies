@@ -23,73 +23,34 @@ class UserController {
             return;
         }
 
-        $bdd = GetPDO::getpdo();
-        $checkQuery = $bdd->prepare('SELECT * FROM users WHERE email = ?');
-        $checkQuery->execute([$email]);
-        $user = $checkQuery->fetch();
+        // request curl to http://accrodev/api/signin in post for signin
 
-        if ($user) {
-            if ($user['accreditation'] > 0) {
-                echo json_encode(['statut' => false, 'message' => 'Email already exists']);
-                return;
-            } else {
-                // Mettre à jour les données de l'utilisateur non validé
-                $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
-                $confirmationCode = rand(100000, 999999);
+        $curl = curl_init();
+        curl_setopt_array($curl, array(
+            CURLOPT_URL => $_ENV["AUTH_HOST"] .  "/api/signin" ,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING => "",
+            CURLOPT_MAXREDIRS => 10,
+            CURLOPT_TIMEOUT => 0,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST => "POST",
+            CURLOPT_POSTFIELDS => "email=$email&password=$password",
+            CURLOPT_HTTPHEADER => array(
+                "Content-Type: application/x-www-form-urlencoded"
+            ),
+        ));
+        $response = curl_exec($curl);
+        curl_close($curl);
+        $response = json_decode($response);
+        var_dump($response); 
 
-                $updateQuery = $bdd->prepare('UPDATE users SET name = ?, password = ?, codeConfirm = ? WHERE email = ?');
-                $result = $updateQuery->execute([$name, $hashedPassword, $confirmationCode, $email]);
-
-                if ($result) {
-                    // Envoyer l'email de confirmation
-                    $mail = new Mail($email, "Votre code de confirmation est : $confirmationCode", "Confirmation de votre inscription");
-                    if (!$mail->send()) {
-                        echo json_encode(['statut' => false, 'message' => 'Failed to send confirmation email']);
-                        return;
-                    }
-
-                    // Enregistrer le code de confirmation dans la session 
-                    $_SESSION['confirmation_code'] = $confirmationCode;
-                    $_SESSION['email'] = $email;
-                    $_SESSION['password'] = $password;
-
-                    echo json_encode(['statut' => true, 'message' => 'User registered successfully. Please check your email for the confirmation code.']);
-                } else {
-                    echo json_encode(['statut' => false, 'message' => 'Failed to update user']);
-                }
-                return;
-            }
-        }
-
-        $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
-        $confirmationCode = rand(100000, 999999);
-
-        // Envoyer l'email de confirmation
-        $mail = new Mail($email, "Votre code de confirmation est : $confirmationCode", "Confirmation de votre inscription");
-        if (!$mail->send()) {
-            echo json_encode(['statut' => false, 'message' => 'Failed to send confirmation email']);
+        if($response->statut == false){
+            echo json_encode(['statut' => false, 'message' => 'Invalid email or password']);
             return;
         }
 
-        $insertQuery = $bdd->prepare('INSERT INTO users (name, email, password, accreditation, codeConfirm) VALUES (?, ?, ?, ?, ?)');
-        $result = $insertQuery->execute([
-            $name,
-            $email,
-            $hashedPassword,
-            0,
-            $confirmationCode
-        ]);
-
-        if ($result) {
-            // Enregistrer le code de confirmation dans la session 
-            $_SESSION['confirmation_code'] = $confirmationCode;
-            $_SESSION['email'] = $email;
-            $_SESSION['password'] = $password;
-
-            echo json_encode(['statut' => true, 'message' => 'User registered successfully. Please check your email for the confirmation code.']);
-        } else {
-            echo json_encode(['statut' => false, 'message' => 'Failed to register user']);
-        }
+ 
     }
 
     /**
