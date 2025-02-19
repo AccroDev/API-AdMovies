@@ -45,6 +45,7 @@ $routeur
     ->get("/api/get-movies-in-shop/[i:id]","ShopController@getMoviesInShop","getMoviesInShop")
     ->get("/api/update-shop-path","ShopController@updateShopPath","updateShopPath")
     ->get("/api/get-history","MovieController@getHistory","getHistory")
+    ->get("/api/ville","VilleController@getville","ville")
     ->post("/api/register","UserController@register","register")
     ->post("/api/confirm","UserController@confirm","confirm")
     ->post("/api/login","UserController@login","login")
