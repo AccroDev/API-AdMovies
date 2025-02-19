@@ -11,6 +11,7 @@ class Search {
     private $config;
 
     public function __construct() { 
+        
         // Charger les variables d'environnement
         $dotenv = Dotenv::createImmutable(dirname(__DIR__));
         $dotenv->load();

@@ -22,6 +22,7 @@ set_error_handler('Controllers\Errors::error');
 set_exception_handler('Controllers\Errors::error');  */
  
 $_SESSION["email"] = "Josephemrys3@gmail.com";//a supprimmer
+$_SESSION["id"] = 466;//a supprimmer
 
 $routeur   
 

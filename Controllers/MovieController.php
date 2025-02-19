@@ -5,28 +5,98 @@ use Models\GetPDO;
 use PDO;
 
 class MovieController {
-    /**
-     * Récupère tous les films dans la base de données avec pagination
-     */
-    public static function getMovies() {
+
+    public static function getMovieWithVille($ville,$type,$onlyAvailable,$limit,$offset) 
+    {
         
-        $userId = $_SESSION['id'] ?? null;
+        $bdd = GetPDO::getpdo();  
+        if ($onlyAvailable === 'true') {   
+            // get shop.id from this ville
+            $stmt = $bdd->prepare('SELECT id FROM shops WHERE ville = :ville');
+            $stmt->execute([':ville' => $ville]);  
+            $shops = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-        $page = $_GET['page'] ?? 1;
-        $limit = 20;
-        $offset = ($page - 1) * $limit;
+            if (!$shops || empty($shops)) {
+                echo json_encode([]); 
+                return;
+            }
 
-        $bdd = GetPDO::getpdo();
-        $query = 'SELECT id, titre, miniature, description, contenu, categori, date FROM movies ORDER BY id DESC LIMIT :limit OFFSET :offset';
-        $stmt = $bdd->prepare($query);
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-        $stmt->execute();
-        $movies = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            // get movies.id from this shop 
+            $shopsFound = implode(',',array_map('intval', $shops)); 
 
+            $stmt = $bdd->prepare('SELECT movie_id FROM shop_movies WHERE shop_id IN (' . $shopsFound . ')');
+            $stmt->execute();
+            $movies = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+            if (!$movies || empty($movies)) {
+                echo json_encode([]); 
+                return;
+            }
+
+            $setCateg = '';
+            if ($type) {
+                $setCateg = "AND categori = '$type'";
+            }
+
+            // get movies details
+            $movieFound = implode(',',array_map('intval', $movies)) ;
+            $query = "SELECT id, titre, miniature, description, contenu, categori, date FROM movies WHERE id IN (" . $movieFound . ") ". $setCateg ." ORDER BY id DESC LIMIT $limit OFFSET $offset";
+
+            $stmt = $bdd->query($query); 
+            $moviesDet = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        
+            // echo result like json
+            $result =  self::formatedResult($moviesDet,$_SESSION['id'] ?? null);
+            echo json_encode($result); 
+        }else {
+
+            // select all movie limit is limit and offset is offset order by id desc 
+            $setCateg = '';
+            if ($type && $type !== '') {
+                $setCateg = " WHERE categori = '$type'";
+            }
+            $sql = "SELECT id, titre, miniature, description, contenu, categori, date FROM movies ". $setCateg ." ORDER BY id DESC LIMIT $limit OFFSET $offset";  
+            $stmt = $bdd->prepare($sql); 
+            $stmt->execute();
+            $moviesDet = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // get all shop.id where from this ville params
+
+            $vReq = $bdd->prepare("SELECT id FROM shops WHERE ville = :ville");
+            $vReq->execute([':ville' => $ville]);
+            $allVillId = $vReq->fetchAll(PDO::FETCH_ASSOC);
+
+            $villeIdArray = implode(',',array_map(fn($row) => $row['id'], $allVillId));
+
+            foreach ($moviesDet as $movie) {
+
+                $movieId = $movie['id']; 
+                $shops = []; 
+
+                if ($allVillId && !empty($allVillId)) {  
+
+                    $stmt = $bdd->prepare('SELECT shop_id FROM shop_movies WHERE movie_id = :movieId AND shop_id IN (' . $villeIdArray  . ')'); 
+                    $stmt->execute([':movieId' => $movieId]);
+                    $shops = $stmt->fetchAll(PDO::FETCH_COLUMN); 
+                }
+                
+                $key = array_search($movie, $moviesDet); 
+                $moviesDet[$key]['match'] = empty($shops) ? false : true; 
+            }
+
+            // echo result like json
+            $result =  self::formatedResult($moviesDet,$_SESSION['id'] ?? null);
+            echo json_encode($result); 
+        }
+    }
+
+    public static function formatedResult ($movies,$userId)
+    {
         $threeMonthsAgo = time() - (3 * 30 * 24 * 60 * 60); // Timestamp pour trois mois
 
         $formattedResults = [];
+        $bdd = GetPDO::getpdo();
         foreach ($movies as $movie) {
             $contenu = json_decode($movie['contenu'], true);
 
@@ -41,11 +111,14 @@ class MovieController {
             $totalLike = $totalLikeQuery->fetchColumn();
 
             // Vérifier si l'utilisateur actuel a voté pour cette série durant les 3 derniers mois
-            $userLikeQuery = $bdd->prepare('SELECT COUNT(*) as user_vote_count FROM votes WHERE movie_id = ? AND user_id = ? AND date >= ?');
-            $userLikeQuery->execute([$movie['id'], $userId, $threeMonthsAgo]);
-            $userLike = $userLikeQuery->fetchColumn() > 0;
+            $userLike = false;
+            if ($userId) { 
+                $userLikeQuery = $bdd->prepare('SELECT COUNT(*) as user_vote_count FROM votes WHERE movie_id = ? AND user_id = ? AND date >= ?');
+                $userLikeQuery->execute([$movie['id'], $userId, $threeMonthsAgo]);
+                $userLike = $userLikeQuery->fetchColumn() > 0;
+            }
 
-            $formattedResults[] = [
+            $itemToAdd = [
                 'id' => $movie['id'],
                 'titre' => $movie['titre'],
                 'miniature' => $movie['miniature'],
@@ -55,11 +128,124 @@ class MovieController {
                 'likeCount' => (int) $likeCount,
                 'totLike' => (int) $totalLike,
                 "type" => $movie['categori'],
-                'date' => date('d-m-Y', strtotime($movie['date']))
+                'date' => date('d-m-Y', strtotime($movie['date'])), 
             ];
+            if (isset($movie['match'])) {
+                $itemToAdd['match'] = $movie['match'];
+            }
+            $formattedResults[] = $itemToAdd;
         }
 
-        echo json_encode($formattedResults);
+        return $formattedResults;
+    }
+
+    public static function getMovieWithShop($type,$onlyAvailable, $shop, $limit,$offset) 
+    {
+        
+        $bdd = GetPDO::getpdo();
+        if ($onlyAvailable === 'true') {
+            
+            // get movies from this shop
+
+            $setCateg = '';
+            if ($type) {
+                $setCateg = "AND categori = '$type'";
+            }
+
+            $sql = "SELECT movie_id FROM shop_movies WHERE shop_id = $shop ORDER BY id DESC LIMIT $limit OFFSET $offset";
+            $stmt = $bdd->query($sql); 
+            $movies = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+            if (empty($movies)) {
+                echo json_encode([]);
+                return;
+            }
+            
+            $villeIdArray = implode(',',$movies);  
+
+            $getDer = $bdd->prepare("SELECT id, titre, miniature, description, contenu, categori, date FROM movies WHERE id IN (" . $villeIdArray . ") ". $setCateg ." ORDER BY id DESC");
+            $getDer->execute();
+            $moviesDet = $getDer->fetchAll(PDO::FETCH_ASSOC);
+
+            $result =  self::formatedResult($moviesDet,$_SESSION['id'] ?? null);
+            echo json_encode($result);
+
+        }else {
+ 
+            $setCateg = '';
+            if ($type && $type !== '') {
+                $setCateg = " WHERE categori = '$type'";
+            }
+            $sql = "SELECT id, titre, miniature, description, contenu, categori, date FROM movies ". $setCateg ." ORDER BY id DESC LIMIT $limit OFFSET $offset";  
+            $stmt = $bdd->prepare($sql); 
+            $stmt->execute();
+            $moviesDet = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // get all ville shop
+  
+
+            $villeIdArray = ''.$shop;  
+
+            foreach ($moviesDet as $movie) {
+                $movieId = $movie['id'];
+                $stmt = $bdd->prepare('SELECT shop_id FROM shop_movies WHERE movie_id = :movieId AND shop_id IN (' . $villeIdArray . ')');
+                $stmt->execute([':movieId' => $movieId]);
+                $shops = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+                $key = array_search($movie, $moviesDet); 
+                $moviesDet[$key]['match'] = empty($shops) ?false : true; 
+            }
+
+            // echo result like json
+            $result =  self::formatedResult($moviesDet,$_SESSION['id'] ?? null);
+            echo json_encode($result); 
+        }
+    }
+    public static function getMovieWithoutShop($type,$limit,$offset) 
+    {
+        $bdd = GetPDO::getpdo();
+
+        $setCateg = '';
+        if ($type) {
+            $setCateg = "WHERE categori = '$type'";
+        }
+
+        //get all movie with offset and limit order by id
+        $sql = "SELECT id, titre, miniature, description, contenu, categori, date FROM movies ". $setCateg ." ORDER BY id DESC LIMIT $limit OFFSET $offset";
+        $stmt = $bdd->prepare($sql);
+        $stmt->execute();
+        $moviesDet = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $result =  self::formatedResult($moviesDet,$_SESSION['id'] ?? null);
+        echo json_encode($result);
+
+    }
+    /**
+     * Récupère tous les films dans la base de données avec pagination et filtres
+     */
+    public static function getMovies() { 
+
+        $page = $_GET['page'] ?? 1;
+        $ville = $_GET['ville'] ?? null;
+        $shop = $_GET['shop'] ?? null;
+        $type = $_GET['type'] ?? null;
+        $onlyAvailable = $_GET['available'] ?? false;
+
+        $limit = 20;
+        $offset = ($page - 1) * $limit;
+
+        if ($ville && !$shop) {
+            self::getMovieWithVille($ville,$type,$onlyAvailable,$limit,$offset);
+            return;
+        }else if($shop){
+            self::getMovieWithShop($type,$onlyAvailable, $shop, $limit,$offset);
+            return;
+        }else {
+            self::getMovieWithoutShop($type,$limit,$offset);
+            return;
+        }  
+
+        echo json_encode([]);
     }
 
     /**
