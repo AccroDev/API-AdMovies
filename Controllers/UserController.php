@@ -67,16 +67,17 @@ class UserController {
     /**
      * Confirmation de l'utilisateur
      */
+   
     public function confirm() { 
         $confirmationCode = $_POST['confirmation_code'] ?? null;
         $email = $_SESSION['email'] ?? null;
 
         if (!$confirmationCode || !$email) {
-            echo json_encode(['statut' => false, 'message' => 'Missing confirmation code or email']);
+            echo json_encode(['statut' => false, 'message' => 'Code de confirmation ou email manquant']);
             return;
         }
 
-        // Initialize cURL request to authentication service
+        // Initialiser la requête cURL vers le service d'authentification
         $curl = curl_init();
         curl_setopt_array($curl, array(
             CURLOPT_URL => $_ENV["AUTH_HOST"] . "/api/confirmUser",
@@ -96,36 +97,36 @@ class UserController {
         curl_close($curl);
 
         if ($response === false) {
-            echo json_encode(['statut' => false, 'message' => 'Failed to connect to authentication service', 'code' => 500]);
+            echo json_encode(['statut' => false, 'message' => 'Échec de la connexion au service d\'authentification', 'code' => 500]);
             return;
         }
 
         $response = json_decode($response, true);
 
         if ($confirmationCode != $_SESSION['confirmation_code']) {
-            echo json_encode(['statut' => false, 'message' => 'Invalid confirmation code']);
+            echo json_encode(['statut' => false, 'message' => 'Code de confirmation invalide']);
             return;
         }
 
-        // Assuming $result is obtained from the response
+        // Supposons que $result est obtenu à partir de la réponse
         $result = $response['statut'] ?? false;
 
         if ($result) {
             $selectResult = $response['data'];
 
-            // Store user data in session
+            // Stocker les données de l'utilisateur dans la session
             $_SESSION['id'] = $selectResult['id'];
             $_SESSION['name'] = $selectResult['name'];
             $_SESSION['email'] = $selectResult['email'];
             $_SESSION['accreditation'] = $selectResult['accreditation'];
 
-            // Set cookies for email and password
-            setcookie('email', $email, time() + (86400 * 30), "/"); // 30 days
-            isset($_SESSION['password']) ? setcookie('password', $_SESSION['password'], time() + (86400 * 30), "/") : ''; // 30 days
+            // Ajouter l'email et le mot de passe dans les cookies
+            setcookie('email', $email, time() + (86400 * 30), "/"); // 30 jours
+            isset($_SESSION['password']) ? setcookie('password', $_SESSION['password'], time() + (86400 * 30), "/") : ''; // 30 jours
 
             echo json_encode([
                 'statut' => true, 
-                'message' => 'User confirmed successfully',
+                'message' => 'Utilisateur confirmé avec succès',
                 "id" => $selectResult["id"],
                 "name" => $selectResult["name"],
                 "email" => $selectResult["email"],
@@ -135,7 +136,7 @@ class UserController {
             ]);
 
         } else {
-            echo json_encode(['statut' => false, 'message' => 'Failed to confirm user']);
+            echo json_encode(['statut' => false, 'message' => 'Échec de la confirmation de l\'utilisateur']);
         }
     }
 
