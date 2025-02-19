@@ -64,7 +64,16 @@ class UserController {
             $_SESSION["avatar"]= $response['data']['avatar'];
             $_SESSION["pays"]= $response['data']['pays'];
             $_SESSION["devise"]= $response['data']['devise'];
+<<<<<<< HEAD
             echo json_encode($response); 
+=======
+            echo json_encode($response);
+            return;
+        }
+        //if status == false  ==> if the user email already exists,400: Champs requis manquants, 500: Erreur interne du serveur,500: Erreur interne du serveur
+        if($response['statut'] == false){
+            echo json_encode($response);
+>>>>>>> ef8907777d6e959b0adba182d778b46be51bee69
             return;
         }
       
@@ -74,32 +83,54 @@ class UserController {
     /**
      * Confirmation de l'utilisateur
      */
+   
     public function confirm() { 
         $confirmationCode = $_POST['confirmation_code'] ?? null;
         $email = $_SESSION['email'] ?? null;
- 
+
         if (!$confirmationCode || !$email) {
-            echo json_encode(['statut' => false, 'message' => 'Missing confirmation code or email']);
+            echo json_encode(['statut' => false, 'message' => 'Code de confirmation ou email manquant']);
             return;
         }
+
+        // Initialiser la requête cURL vers le service d'authentification
+        $curl = curl_init();
+        curl_setopt_array($curl, array(
+            CURLOPT_URL => $_ENV["AUTH_HOST"] . "/api/confirmUser",
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING => "",
+            CURLOPT_MAXREDIRS => 10,
+            CURLOPT_TIMEOUT => 0,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST => "POST",
+            CURLOPT_POSTFIELDS => http_build_query(['confirmation_code' => $confirmationCode, 'email' => $email]),
+            CURLOPT_HTTPHEADER => array(
+                "Content-Type: application/x-www-form-urlencoded"
+            ),
+        ));
+        $response = curl_exec($curl);
+        curl_close($curl);
+
+        if ($response === false) {
+            echo json_encode(['statut' => false, 'message' => 'Échec de la connexion au service d\'authentification', 'code' => 500]);
+            return;
+        }
+
+        $response = json_decode($response, true);
 
         if ($confirmationCode != $_SESSION['confirmation_code']) {
-            echo json_encode(['statut' => false, 'message' => 'Invalid confirmation code']);
+            echo json_encode(['statut' => false, 'message' => 'Code de confirmation invalide']);
             return;
         }
 
-        $bdd = GetPDO::getpdo();
-        $updateQuery = $bdd->prepare('UPDATE users SET accreditation = 1 WHERE email = ?');
-        $result = $updateQuery->execute([$email]);
-
-        //get user data
-        $selectQuery = $bdd->prepare('SELECT * FROM users WHERE email = ? LIMIT 1');
-        $selectQuery->execute([$email]);
-        $selectResult = $selectQuery->fetch();
+        // Supposons que $result est obtenu à partir de la réponse
+        $result = $response['statut'] ?? false;
 
         if ($result) {
+            $selectResult = $response['data'];
 
-            // Ajouter les données personnelles dans la session 
+            // Stocker les données de l'utilisateur dans la session
             $_SESSION['id'] = $selectResult['id'];
             $_SESSION['name'] = $selectResult['name'];
             $_SESSION['email'] = $selectResult['email'];
@@ -111,7 +142,7 @@ class UserController {
 
             echo json_encode([
                 'statut' => true, 
-                'message' => 'User confirmed successfully',
+                'message' => 'Utilisateur confirmé avec succès',
                 "id" => $selectResult["id"],
                 "name" => $selectResult["name"],
                 "email" => $selectResult["email"],
@@ -121,7 +152,7 @@ class UserController {
             ]);
 
         } else {
-            echo json_encode(['statut' => false, 'message' => 'Failed to confirm user']);
+            echo json_encode(['statut' => false, 'message' => 'Échec de la confirmation de l\'utilisateur']);
         }
     }
 
