@@ -35,7 +35,7 @@ class UserController {
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
             CURLOPT_CUSTOMREQUEST => "POST",
-            CURLOPT_POSTFIELDS => "email=$email&password=$password",
+            CURLOPT_POSTFIELDS => "name=$name&email=$email&password=$password",
             CURLOPT_HTTPHEADER => array(
                 "Content-Type: application/x-www-form-urlencoded"
             ),
@@ -54,7 +54,6 @@ class UserController {
             $_SESSION["pays"]= $response['data']['pays'];
             $_SESSION["devise"]= $response['data']['devise'];
             echo json_encode($response);
-            var_dump($_SESSION);
             return;
         }
         //if status == false  ==> if the user email already exists,400: Champs requis manquants, 500: Erreur interne du serveur,500: Erreur interne du serveur
@@ -71,37 +70,58 @@ class UserController {
     public function confirm() { 
         $confirmationCode = $_POST['confirmation_code'] ?? null;
         $email = $_SESSION['email'] ?? null;
- 
+
         if (!$confirmationCode || !$email) {
             echo json_encode(['statut' => false, 'message' => 'Missing confirmation code or email']);
             return;
         }
+
+        // Initialize cURL request to authentication service
+        $curl = curl_init();
+        curl_setopt_array($curl, array(
+            CURLOPT_URL => $_ENV["AUTH_HOST"] . "/api/confirmUser",
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING => "",
+            CURLOPT_MAXREDIRS => 10,
+            CURLOPT_TIMEOUT => 0,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST => "POST",
+            CURLOPT_POSTFIELDS => http_build_query(['confirmation_code' => $confirmationCode, 'email' => $email]),
+            CURLOPT_HTTPHEADER => array(
+                "Content-Type: application/x-www-form-urlencoded"
+            ),
+        ));
+        $response = curl_exec($curl);
+        curl_close($curl);
+
+        if ($response === false) {
+            echo json_encode(['statut' => false, 'message' => 'Failed to connect to authentication service', 'code' => 500]);
+            return;
+        }
+
+        $response = json_decode($response, true);
 
         if ($confirmationCode != $_SESSION['confirmation_code']) {
             echo json_encode(['statut' => false, 'message' => 'Invalid confirmation code']);
             return;
         }
 
-        $bdd = GetPDO::getpdo();
-        $updateQuery = $bdd->prepare('UPDATE users SET accreditation = 1 WHERE email = ?');
-        $result = $updateQuery->execute([$email]);
-
-        //get user data
-        $selectQuery = $bdd->prepare('SELECT * FROM users WHERE email = ? LIMIT 1');
-        $selectQuery->execute([$email]);
-        $selectResult = $selectQuery->fetch();
+        // Assuming $result is obtained from the response
+        $result = $response['statut'] ?? false;
 
         if ($result) {
+            $selectResult = $response['data'];
 
-            // Ajouter les données personnelles dans la session 
+            // Store user data in session
             $_SESSION['id'] = $selectResult['id'];
             $_SESSION['name'] = $selectResult['name'];
             $_SESSION['email'] = $selectResult['email'];
             $_SESSION['accreditation'] = $selectResult['accreditation'];
 
-            // Ajouter l'email et le mot de passe dans les cookies
-            setcookie('email', $email, time() + (86400 * 30), "/"); // 30 jours
-            isset($_SESSION['password']) ? setcookie('password', $_SESSION['password'], time() + (86400 * 30), "/") : ''; // 30 jours
+            // Set cookies for email and password
+            setcookie('email', $email, time() + (86400 * 30), "/"); // 30 days
+            isset($_SESSION['password']) ? setcookie('password', $_SESSION['password'], time() + (86400 * 30), "/") : ''; // 30 days
 
             echo json_encode([
                 'statut' => true, 
