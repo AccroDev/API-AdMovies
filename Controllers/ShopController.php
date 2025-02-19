@@ -3,6 +3,7 @@ namespace Controllers;
 
 use Models\GetPDO;
 use Dotenv\Dotenv;
+use PDO;
 
 class ShopController {
     public function __construct() {
@@ -11,10 +12,9 @@ class ShopController {
     }
 
     /**
-     * Crée une boutique de transfert des films
+     * Crée ou met à jour une boutique de transfert des films
      */
     public function createShop() {
-        
         $userId = $_SESSION['id'] ?? null;
 
         if (!$userId) {
@@ -22,42 +22,79 @@ class ShopController {
             return;
         }
 
+        $shopId = $_POST['shop_id'] ?? null;
         $name = $_POST['name'] ?? null;
         $miniature = $_FILES['miniature'] ?? null;
         $ville = $_POST['ville'] ?? null;
         $phoneNumber = $_POST['phone_number'] ?? null;
         $address = $_POST['address'] ?? null;
-        
-        if (!$name || !$miniature || !$ville || !$phoneNumber || !$address) {
+
+        if (!$name || !$ville || !$phoneNumber || !$address) {
             echo json_encode(['statut' => false, 'message' => 'Missing required fields']);
             return;
         }
 
-        // Enregistrer l'image
-        $targetDir = dirname(__DIR__) . '/Views/img/shops/';
-        $targetFile = $targetDir . basename($miniature['name']);
-        if (!move_uploaded_file($miniature['tmp_name'], $targetFile)) {
-            echo json_encode(['statut' => false, 'message' => 'Failed to upload image']);
-            return;
-        }
-
         $bdd = GetPDO::getpdo();
-        $insertQuery = $bdd->prepare('INSERT INTO shops (name, miniature, ville, phone_number, address, date, auth, visibility) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-        $result = $insertQuery->execute([
-            $name,
-            $miniature['name'],
-            $ville,
-            $phoneNumber,
-            $address,
-            time(),
-            $userId,
-            1 // Par défaut, la visibilité est à 1
-        ]);
 
-        if ($result) {
-            echo json_encode(['statut' => true, 'message' => 'Shop created successfully']);
+        if ($shopId) {
+            // Mettre à jour la boutique existante
+            if ($miniature && $miniature['size'] > 0) {
+                // Enregistrer la nouvelle image
+                $targetDir = dirname(__DIR__) . '/Views/img/shops/';
+                $targetFile = $targetDir . basename($miniature['name']);
+                if (!move_uploaded_file($miniature['tmp_name'], $targetFile)) {
+                    echo json_encode(['statut' => false, 'message' => 'Failed to upload image']);
+                    return;
+                }
+                $miniaturePath = $miniature['name'];
+            } else {
+                // Garder l'ancienne image
+                $query = $bdd->prepare('SELECT miniature FROM shops WHERE id = ?');
+                $query->execute([$shopId]);
+                $miniaturePath = $query->fetchColumn();
+            }
+
+            $updateQuery = $bdd->prepare('UPDATE shops SET name = ?, miniature = ?, ville = ?, phone_number = ?, address = ? WHERE id = ? AND auth = ?');
+            $result = $updateQuery->execute([$name, $miniaturePath, $ville, $phoneNumber, $address, $shopId, $userId]);
+
+            if ($result) {
+                echo json_encode(['statut' => true, 'message' => 'Shop updated successfully']);
+            } else {
+                echo json_encode(['statut' => false, 'message' => 'Failed to update shop']);
+            }
+            return;
         } else {
-            echo json_encode(['statut' => false, 'message' => 'Failed to create shop']);
+            // Créer une nouvelle boutique
+            if ($miniature) {
+                // Enregistrer l'image
+                $targetDir = dirname(__DIR__) . '/Views/img/shops/';
+                $targetFile = $targetDir . basename($miniature['name']);
+                if (!move_uploaded_file($miniature['tmp_name'], $targetFile)) {
+                    echo json_encode(['statut' => false, 'message' => 'Failed to upload image']);
+                    return;
+                }
+                $miniaturePath = $miniature['name'];
+            } else {
+                $miniaturePath = null;
+            }
+
+            $insertQuery = $bdd->prepare('INSERT INTO shops (name, miniature, ville, phone_number, address, date, auth, visibility) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+            $result = $insertQuery->execute([
+                $name,
+                $miniaturePath,
+                $ville,
+                $phoneNumber,
+                $address,
+                time(),
+                $userId,
+                1 // Par défaut, la visibilité est à 1
+            ]);
+
+            if ($result) {
+                echo json_encode(['statut' => true, 'message' => 'Shop created successfully']);
+            } else {
+                echo json_encode(['statut' => false, 'message' => 'Failed to create shop']);
+            }
         }
     }
 
@@ -145,7 +182,7 @@ class ShopController {
     /**
      * Récupère toutes les boutiques d'un utilisateur
      */
-    public function getShops() {
+    public function getUserShops() {
         
         $userId = $_SESSION['id'] ?? null;
 
@@ -263,6 +300,35 @@ class ShopController {
         echo json_encode($formattedResults);
     }
 
+    /**
+     * Recuper les films d'une boutique
+     */
+
+    public function getMovieIdShop() {
+
+        $shopId = $_GET['shop'] ?? null;
+
+        if (!$shopId) {
+            echo json_encode(['statut' => false, 'message' => 'Missing shop ID']);
+            return;
+        }
+
+        $bdd = GetPDO::getpdo();
+        $query = $bdd->prepare('SELECT movie_id, address FROM shop_movies WHERE shop_id = ?');
+        $query->execute([$shopId]);
+        $movies = $query->fetchAll();
+
+        $formattedResults = [];
+        foreach ($movies as $movie) {
+            $formattedResults[] = [
+                "id" => $movie['movie_id'],
+                "path" => $movie['address']
+            ];
+        }
+
+        echo json_encode($formattedResults);
+    }
+
     public function updateShopPath()
     {
         $movieId = $_GET['movie'] ?? null; 
@@ -299,6 +365,71 @@ class ShopController {
             echo json_encode(['statut' => true, 'message' => 'Movie added to shop successfully']);
             return;
         } 
+    }
+
+    /**
+     * Récupère les boutiques d'une ville spécifique qui ont un film spécifique
+     */
+    public function getMovieShopsByVille() {
+        $ville = $_GET['ville'] ?? null;
+        $movieId = $_GET['movie'] ?? null;
+
+        if (!$ville || !$movieId) {
+            echo json_encode(['statut' => false, 'message' => 'Missing ville or movie ID']);
+            return;
+        }
+
+        $bdd = GetPDO::getpdo();
+        $query = $bdd->prepare('SELECT shops.id, shops.name, shops.miniature, shops.ville, shops.phone_number, shops.address, shops.date FROM shops LEFT JOIN shop_movies ON shops.id = shop_movies.shop_id WHERE shops.ville = ? AND shop_movies.movie_id = ?');
+        $query->execute([$ville, $movieId]);
+        $shops = $query->fetchAll(PDO::FETCH_ASSOC);
+
+        $formattedResults = [];
+        foreach ($shops as $shop) {
+            $formattedResults[] = [
+                'id' => $shop['id'],
+                'name' => $shop['name'],
+                'miniature' => '/Views/img/shops/' . $shop['miniature'],
+                'ville' => $shop['ville'],
+                'phone_number' => $shop['phone_number'],
+                'address' => $shop['address'],
+                'date' => date('d-m-Y', strtotime($shop['date']))
+            ];
+        }
+
+        echo json_encode($formattedResults);
+    }
+
+    /**
+     * Récupère toutes les boutiques dans une ville spécifique
+     */
+    public function getShopsByVille() {
+        $ville = $_GET['ville'] ?? null;
+
+        if (!$ville) {
+            echo json_encode(['statut' => false, 'message' => 'Missing ville']);
+            return;
+        }
+
+        $bdd = GetPDO::getpdo();
+        $query = $bdd->prepare('SELECT id, name, miniature, ville, phone_number, address, date FROM shops WHERE ville = ?');
+        $query->execute([$ville]);
+        $shops = $query->fetchAll(PDO::FETCH_ASSOC);
+
+        $formattedResults = [];
+        foreach ($shops as $shop) {
+            $formattedResults[] = [
+                'id' => $shop['id'],
+                'name' => $shop['name'],
+                'miniature' => '/Views/img/shops/' . $shop['miniature'],
+                'ville' => $shop['ville'],
+                'phone_number' => $shop['phone_number'],
+                'address' => $shop['address'],
+                'date' => date('d-m-Y', strtotime($shop['date']))
+            ];
+        }
+
+        echo json_encode($formattedResults);
     }
 }
 ?>

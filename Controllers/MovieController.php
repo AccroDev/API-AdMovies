@@ -171,5 +171,19 @@ class MovieController {
 
         echo json_encode($formattedResults);
     }
+
+    /**
+     * Récupère les villes
+     */
+    public function getAllVilles()
+    {
+
+        $bdd = GetPDO::getpdo(); 
+        $request = $bdd->query('SELECT * FROM villes'); 
+        $villes = $request->fetchAll(PDO::FETCH_ASSOC);
+
+        echo json_encode($villes);
+        
+    }
 }
 ?>

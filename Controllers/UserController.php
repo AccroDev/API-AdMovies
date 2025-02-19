@@ -19,7 +19,7 @@ class UserController {
         $password = $_POST['password'] ?? null;
 
         if (!$name || !$email || !$password) {
-            echo json_encode(['statut' => false, 'message' => 'Missing required fields']);
+            echo json_encode(['statut' => false, 'message' => 'Missing required fields', "code" => 400]);
             return;
         }
 
@@ -35,20 +35,36 @@ class UserController {
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
             CURLOPT_CUSTOMREQUEST => "POST",
-            CURLOPT_POSTFIELDS => "email=$email&password=$password",
+            CURLOPT_POSTFIELDS => "name=$name&email=$email&password=$password",
             CURLOPT_HTTPHEADER => array(
                 "Content-Type: application/x-www-form-urlencoded"
             ),
         ));
         $response = curl_exec($curl);
         curl_close($curl);
-        $response = json_decode($response); 
 
-        if($response->statut === false){
-            echo json_encode($response);
+        if (!$response || $response === null) {
+            echo json_encode(['statut' => false, 'message' => 'Failed to connect to authentication server', 'code' => 500]); 
             return;
         }
-
+ 
+        $response = json_decode($response,true); 
+        if($response['statut']  === false){
+            echo json_encode($response);
+            return;
+        } 
+        
+        //if everything gone right
+        
+        $userData = $response['data'];  
+        $_SESSION["id"] = $userData["id"];
+        $_SESSION["name"] = $userData["name"];
+        $_SESSION["email"] = $userData["email"];
+        $_SESSION["accreditation"] = $userData["accreditation"];
+        $_SESSION["avatar"] = $userData["avatar"]; 
+ 
+        echo json_encode($response);
+        return; 
         
     }
 
@@ -59,51 +75,53 @@ class UserController {
         $confirmationCode = $_POST['confirmation_code'] ?? null;
         $email = $_SESSION['email'] ?? null;
  
-        if (!$confirmationCode || !$email) {
-            echo json_encode(['statut' => false, 'message' => 'Missing confirmation code or email']);
+        if (!$confirmationCode || !$email) {   
+            echo json_encode(['statut' => false, 'message' => 'Missing confirmation code or email', 'code' => 400]);
             return;
         }
 
-        if ($confirmationCode != $_SESSION['confirmation_code']) {
-            echo json_encode(['statut' => false, 'message' => 'Invalid confirmation code']);
+        // request curl to http://accrodev/api/confirm in post for confirm
+
+        $curl = curl_init();
+        curl_setopt_array($curl, array(
+            CURLOPT_URL => $_ENV["AUTH_HOST"] .  "/api/confirmUser" ,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING => "",
+            CURLOPT_MAXREDIRS => 10,
+            CURLOPT_TIMEOUT => 0,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST => "POST",
+            CURLOPT_POSTFIELDS => "email=$email&confirmation_code=$confirmationCode",
+            CURLOPT_HTTPHEADER => array(
+                "Content-Type: application/x-www-form-urlencoded"
+            ),
+        ));
+        $response = curl_exec($curl);
+        curl_close($curl); 
+
+        if (!$response || $response === null) {
+            echo json_encode(['statut' => false, 'message' => 'Failed to connect to authentication server', 'code' => 500]); 
+            return;
+        }
+        
+        $response = json_decode($response,true);
+        if($response['statut']  === false){
+            echo json_encode($response);
             return;
         }
 
-        $bdd = GetPDO::getpdo();
-        $updateQuery = $bdd->prepare('UPDATE users SET accreditation = 1 WHERE email = ?');
-        $result = $updateQuery->execute([$email]);
+        //if everything gone right
 
-        //get user data
-        $selectQuery = $bdd->prepare('SELECT * FROM users WHERE email = ? LIMIT 1');
-        $selectQuery->execute([$email]);
-        $selectResult = $selectQuery->fetch();
+        $userData = $response['data'];
+        $_SESSION["id"] = $userData["id"];
+        $_SESSION["name"] = $userData["name"];
+        $_SESSION["email"] = $userData["email"];
+        $_SESSION["accreditation"] = $userData["accreditation"];
+        $_SESSION["avatar"] = $userData["avatar"];
 
-        if ($result) {
-
-            // Ajouter les données personnelles dans la session 
-            $_SESSION['id'] = $selectResult['id'];
-            $_SESSION['name'] = $selectResult['name'];
-            $_SESSION['email'] = $selectResult['email'];
-            $_SESSION['accreditation'] = $selectResult['accreditation'];
-
-            // Ajouter l'email et le mot de passe dans les cookies
-            setcookie('email', $email, time() + (86400 * 30), "/"); // 30 jours
-            isset($_SESSION['password']) ? setcookie('password', $_SESSION['password'], time() + (86400 * 30), "/") : ''; // 30 jours
-
-            echo json_encode([
-                'statut' => true, 
-                'message' => 'User confirmed successfully',
-                "id" => $selectResult["id"],
-                "name" => $selectResult["name"],
-                "email" => $selectResult["email"],
-                "accreditation" => $selectResult["accreditation"], 
-                "date" => date("d-m-Y", strtotime($selectResult["date"])),  
-                "avatar" => $selectResult["avatar"] && $selectResult["avatar"] !== '' ? $selectResult["avatar"] : '/Views/img/avatar/avatar.jpg'
-            ]);
-
-        } else {
-            echo json_encode(['statut' => false, 'message' => 'Failed to confirm user']);
-        }
+        echo json_encode($response);
+        return; 
     }
 
     /**
@@ -114,25 +132,49 @@ class UserController {
         $password = $_POST['password'] ?? null;
 
         if (!$email || !$password) {
-            echo json_encode(['statut' => false, 'message' => 'Missing email or password']);
+            echo json_encode(['statut' => false, 'message' => 'Missing email or password', 'code' => 400]);
             return;
         }
 
-        $bdd = GetPDO::getpdo();
-        $query = $bdd->prepare('SELECT * FROM users WHERE email = ?');
-        $query->execute([$email]);
-        $user = $query->fetch(); 
+        // request curl to http://accrodev/api/login in post for login
 
-        if (!$user || !password_verify($password, $user['password'])) {
-            echo json_encode(['statut' => false, 'message' => 'Invalid email or password']);
+        $curl = curl_init();
+        curl_setopt_array($curl, array(
+            CURLOPT_URL => $_ENV["AUTH_HOST"] .  "/api/login" ,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING => "",
+            CURLOPT_MAXREDIRS => 10,
+            CURLOPT_TIMEOUT => 0,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST => "POST",
+            CURLOPT_POSTFIELDS => "email=$email&password=$password",
+            CURLOPT_HTTPHEADER => array(
+                "Content-Type: application/x-www-form-urlencoded"
+            ),
+        ));
+        $response = curl_exec($curl);
+        curl_close($curl);
+
+        if (!$response || $response === null) {
+            echo json_encode(['statut' => false, 'message' => 'Failed to connect to authentication server', 'code' => 500]); 
             return;
         }
 
-        // Ajouter les données personnelles dans la session 
-        $_SESSION['id'] = $user['id'];
-        $_SESSION['name'] = $user['name'];
-        $_SESSION['email'] = $user['email'];
-        $_SESSION['accreditation'] = $user['accreditation'];
+        $response = json_decode($response,true);
+        if($response['statut']  === false){
+            echo json_encode($response);
+            return;
+        }
+
+        //if everything gone right
+
+        $userData = $response['data'];
+        $_SESSION["id"] = $userData["id"];
+        $_SESSION["name"] = $userData["name"];
+        $_SESSION["email"] = $userData["email"];
+        $_SESSION["accreditation"] = $userData["accreditation"];
+        $_SESSION["avatar"] = $userData["avatar"]; 
 
         // Ajouter l'email et le mot de passe dans les cookies
         setcookie('email', $email, time() + (86400 * 30), "/"); // 30 jours
@@ -140,13 +182,14 @@ class UserController {
 
         echo json_encode([
             'statut' => true, 
-            'message' => 'User logged in successfully',
-            "id" => $user["id"],
-            "name" => $user["name"],
-            "email" => $user["email"],
-            "accreditation" => $user["accreditation"], 
-            "date" => date("d-m-Y", strtotime($user["date"])),  
-            "avatar" => $user["avatar"] && $user["avatar"] !== '' ? $user["avatar"] : '/Views/img/avatar/avatar.jpg'
+            "code" => 200,
+            'message' => 'User logged in successfully', 
+            "id" => $userData["id"],
+            "name" => $userData["name"],
+            "email" => $userData["email"],
+            "accreditation" => $userData["accreditation"], 
+            "date" => date("d-m-Y", strtotime($userData["date"])),  
+            "avatar" => $userData["avatar"] && $userData["avatar"] !== '' ? $userData["avatar"] : '/Views/img/avatar/avatar.jpg'
         ]);
     }
 
@@ -191,45 +234,47 @@ class UserController {
      * Mot de passe oublié
      */
     public function forgotPassword() {
+
         $email = $_POST['email'] ?? null;
 
         if (!$email) {
-            echo json_encode(['statut' => false, 'message' => 'Missing email']);
+            echo json_encode(['statut' => false, 'message' => 'Missing email', 'code' => 400]);
             return;
         }
 
-        $bdd = GetPDO::getpdo();
-        $query = $bdd->prepare('SELECT * FROM users WHERE email = ?');
-        $query->execute([$email]);
-        $user = $query->fetch();
+        // request curl to http://accrodev/api/forgotPassword in post for forgotPassword
 
-        if (!$user) {
-            echo json_encode(['statut' => false, 'message' => 'Email not found']);
+        $curl = curl_init();
+        curl_setopt_array($curl, array(
+            CURLOPT_URL => $_ENV["AUTH_HOST"] .  "/api/forgotPassword" ,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING => "",
+            CURLOPT_MAXREDIRS => 10,
+            CURLOPT_TIMEOUT => 0,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST => "POST",
+            CURLOPT_POSTFIELDS => "email=$email",
+            CURLOPT_HTTPHEADER => array(
+                "Content-Type: application/x-www-form-urlencoded"
+            ),
+        ));
+        $response = curl_exec($curl);
+        curl_close($curl);
+
+        if (!$response || $response === null) {
+            echo json_encode(['statut' => false, 'message' => 'Failed to connect to authentication server', 'code' => 500]);
             return;
         }
 
-        $confirmationCode = rand(100000, 999999);
-        $updateQuery = $bdd->prepare('UPDATE users SET codeConfirm = ? WHERE email = ?');
-        $result = $updateQuery->execute([$confirmationCode, $email]);
-
-        if ($result) {
-            // Envoyer l'email de confirmation
-            $mail = new Mail($email, "Votre code de réinitialisation est : $confirmationCode", "Réinitialisation de votre mot de passe");
-            if (!$mail->send()) {
-                echo json_encode(['statut' => false, 'message' => 'Failed to send confirmation email']);
-                return;
-            }
-
-            echo json_encode(['statut' => true, 'message' => 'Confirmation code sent to your email']);
-        } else {
-            echo json_encode(['statut' => false, 'message' => 'Failed to update user']);
-        }
+        echo $response; 
     }
 
     /**
      * Réinitialisation du mot de passe
      */
     public function resetPassword() {
+
         $confirmationCode = $_POST['confirmation_code'] ?? null;
         $newPassword = $_POST['new_password'] ?? null;
         $email = $_POST['email'] ?? null;
@@ -238,47 +283,63 @@ class UserController {
             echo json_encode(['statut' => false, 'message' => 'Missing required fields']);
             return;
         }
+        
+        // request curl to http://accrodev/api/resetPassword in post for resetPassword
 
-        $bdd = GetPDO::getpdo();
-        $query = $bdd->prepare('SELECT * FROM users WHERE email = ? AND codeConfirm = ?');
-        $query->execute([$email, $confirmationCode]);
-        $user = $query->fetch();
+        $curl = curl_init();
+        curl_setopt_array($curl, array(
+            CURLOPT_URL => $_ENV["AUTH_HOST"] .  "/api/resetPassword" ,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING => "",
+            CURLOPT_MAXREDIRS => 10,
+            CURLOPT_TIMEOUT => 0,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST => "POST",
+            CURLOPT_POSTFIELDS => "email=$email&confirmation_code=$confirmationCode&new_password=$newPassword",
+            CURLOPT_HTTPHEADER => array(
+                "Content-Type: application/x-www-form-urlencoded"
+            ),
+        ));
+        $response = curl_exec($curl);
+        curl_close($curl);
 
-        if (!$user) {
-            echo json_encode(['statut' => false, 'message' => 'Invalid confirmation code or email']);
+        if (!$response || $response === null) {
+            echo json_encode(['statut' => false, 'message' => 'Failed to connect to authentication server', 'code' => 500]);
             return;
         }
 
-        $hashedPassword = password_hash($newPassword, PASSWORD_BCRYPT);
-        $updateQuery = $bdd->prepare('UPDATE users SET password = ?, codeConfirm = NULL WHERE email = ?');
-        $result = $updateQuery->execute([$hashedPassword, $email]);
+        $response = json_decode($response,true);
 
-        if ($result) {
+        if ($response['statut'] === true) {
+            # create his session
 
-            // Ajouter les données personnelles dans la session 
-            $_SESSION['id'] = $user['id'];
-            $_SESSION['name'] = $user['name'];
-            $_SESSION['email'] = $user['email'];
-            $_SESSION['accreditation'] = $user['accreditation'];
+            $userData = $response['data'];
+
+            $_SESSION["id"] = $userData["id"];
+            $_SESSION["name"] = $userData["name"];
+            $_SESSION["email"] = $userData["email"];
+            $_SESSION["accreditation"] = $userData["accreditation"];
+            $_SESSION["avatar"] = $userData["avatar"];
 
             // Ajouter l'email et le mot de passe dans les cookies
             setcookie('email', $email, time() + (86400 * 30), "/"); // 30 jours
             setcookie('password', $newPassword, time() + (86400 * 30), "/"); // 30 jours
 
-
             echo json_encode([
                 'statut' => true, 
                 'message' => 'Password reset successfully',
-                "id" => $user["id"],
-                "name" => $user["name"],
-                "email" => $user["email"],
-                "accreditation" => $user["accreditation"], 
-                "date" => date("d-m-Y", strtotime($user["date"])) ,  
-                "avatar" => $user["avatar"] && $user["avatar"] !== '' ? $user["avatar"] : '/Views/img/avatar/avatar.jpg'
+                "id" => $userData["id"],
+                "name" => $userData["name"],
+                "email" => $userData["email"],
+                "accreditation" => $userData["accreditation"], 
+                "date" => date("d-m-Y", strtotime($userData["date"])) ,  
+                "avatar" => $userData["avatar"] && $userData["avatar"] !== '' ? $userData["avatar"] : '/Views/img/avatar/avatar.jpg'
             ]);
-        } else {
-            echo json_encode(['statut' => false, 'message' => 'Failed to reset password']);
+            return;
         }
+
+        echo $response; 
     } 
 }
 ?>
