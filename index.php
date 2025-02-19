@@ -17,6 +17,11 @@ $userController->autoLogin();
 $routeur = new Router("Controllers");
 session_start();  
 
+$_SESSION['id'] = 1;
+$_SESSION['accreditation'] = 1; 
+$_SESSION['name'] = "joseph balombe";
+$_SESSION['email'] = "accrodev@gmail.com"; 
+
 /* error_reporting(E_ALL);
 set_error_handler('Controllers\Errors::error');
 set_exception_handler('Controllers\Errors::error');  */

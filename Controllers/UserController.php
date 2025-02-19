@@ -17,7 +17,7 @@ class UserController {
         $name = $_POST['name'] ?? null;
         $email = $_POST['email'] ?? null;
         $password = $_POST['password'] ?? null;
-
+         
         if (!$name || !$email || !$password) {
             echo json_encode(['statut' => false, 'message' => 'Missing required fields']);
             return;
@@ -35,7 +35,7 @@ class UserController {
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
             CURLOPT_CUSTOMREQUEST => "POST",
-            CURLOPT_POSTFIELDS => "email=$email&password=$password",
+            CURLOPT_POSTFIELDS => "name=$name&email=$email&password=$password",
             CURLOPT_HTTPHEADER => array(
                 "Content-Type: application/x-www-form-urlencoded"
             ),
@@ -43,6 +43,17 @@ class UserController {
         $response = curl_exec($curl);
         curl_close($curl);
         $response = json_decode($response,true);
+
+          //if status == false  ==> if the user email already exists,400: Champs requis manquants, 500: Erreur interne du serveur,500: Erreur interne du serveur
+        
+        if (!$response || $response === null) {
+            echo json_encode(['statut' => false, 'message' => 'Request Error']);
+            return;
+        }
+        if($response['statut'] == false){
+            echo json_encode($response);
+            return;
+        }
    
         //if status == true  ==> if the user is registered
         if($response['statut'] == true){
@@ -53,15 +64,10 @@ class UserController {
             $_SESSION["avatar"]= $response['data']['avatar'];
             $_SESSION["pays"]= $response['data']['pays'];
             $_SESSION["devise"]= $response['data']['devise'];
-            echo json_encode($response);
-            var_dump($_SESSION);
+            echo json_encode($response); 
             return;
         }
-        //if status == false  ==> if the user email already exists,400: Champs requis manquants, 500: Erreur interne du serveur,500: Erreur interne du serveur
-        if($response['statut'] == false){
-            echo json_encode($response);
-            return;
-        }
+      
  
     }
 
