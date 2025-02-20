@@ -8,21 +8,24 @@ require "vendor/autoload.php";
 // Charger les variables d'environnement
 $dotenv = Dotenv::createImmutable(__DIR__);
 $dotenv->load();
+
 header("Access-Control-Allow-Origin: *");
+ 
+session_start();  
+
+$_SESSION["id"] = 466;
 
 // Vérifier les cookies et connecter l'utilisateur automatiquement
 $userController = new UserController();
 $userController->autoLogin();
 
 $routeur = new Router("Controllers");
-session_start();  
 
-/* error_reporting(E_ALL);
+
+error_reporting(E_ALL);
 set_error_handler('Controllers\Errors::error');
-set_exception_handler('Controllers\Errors::error');  */
- 
-$_SESSION["email"] = "Josephemrys3@gmail.com";//a supprimmer
-$_SESSION["id"] = 466;//a supprimmer
+set_exception_handler('Controllers\Errors::error'); /*  */
+  
 
 $routeur   
 

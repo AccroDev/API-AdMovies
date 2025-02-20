@@ -28,6 +28,8 @@ class ShopController {
         $ville = $_POST['ville'] ?? null;
         $phoneNumber = $_POST['phone_number'] ?? null;
         $address = $_POST['address'] ?? null;
+        $prixSaison = $_POST['prixSaison'] ?? null;
+        $prixFilm = $_POST['prixFilm'] ?? null;
 
         if (!$name || !$ville || !$phoneNumber || !$address) {
             echo json_encode(['statut' => false, 'message' => 'Missing required fields']);
@@ -54,8 +56,8 @@ class ShopController {
                 $miniaturePath = $query->fetchColumn();
             }
 
-            $updateQuery = $bdd->prepare('UPDATE shops SET name = ?, miniature = ?, ville = ?, phone_number = ?, address = ? WHERE id = ? AND auth = ?');
-            $result = $updateQuery->execute([$name, $miniaturePath, $ville, $phoneNumber, $address, $shopId, $userId]);
+            $updateQuery = $bdd->prepare('UPDATE shops SET name = ?, miniature = ?, ville = ?, phone_number = ?, address = ?, prixFilm = ?, prixSaison = ? WHERE id = ? AND auth = ?');
+            $result = $updateQuery->execute([$name, $miniaturePath, $ville, $phoneNumber, $address, $prixFilm, $prixSaison, $shopId, $userId]);
 
             if ($result) {
                 echo json_encode(['statut' => true, 'message' => 'Shop updated successfully']);
@@ -78,7 +80,7 @@ class ShopController {
                 $miniaturePath = null;
             }
 
-            $insertQuery = $bdd->prepare('INSERT INTO shops (name, miniature, ville, phone_number, address, date, auth, visibility) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+            $insertQuery = $bdd->prepare('INSERT INTO shops (name, miniature, ville, phone_number, address, date, auth, visibility, prixFilm, prixSaison) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
             $result = $insertQuery->execute([
                 $name,
                 $miniaturePath,
@@ -87,7 +89,9 @@ class ShopController {
                 $address,
                 time(),
                 $userId,
-                1 // Par défaut, la visibilité est à 1
+                1, // Par défaut, la visibilité est à 1
+                $prixFilm,
+                $prixSaison
             ]);
 
             if ($result) {
@@ -206,7 +210,9 @@ class ShopController {
                 'ville' => $shop['ville'],
                 'phone_number' => $shop['phone_number'],
                 'address' => $shop['address'],
-                'date' => date('d-m-Y', strtotime($shop['date']))
+                'date' => date('d-m-Y', strtotime($shop['date'])),
+                'prixFilm' => $shop['prixFilm'],
+                'prixSaison' => $shop['prixSaison']
             ];
         }
 
@@ -318,12 +324,24 @@ class ShopController {
         $query->execute([$shopId]);
         $movies = $query->fetchAll();
 
+        //check if user is auth of this shop
+        $isAuth = false;
+        if (isset($_SESSION['id'])) { 
+            $isAuthRequest = $bdd->prepare('SELECT auth FROM shops WHERE auth = ? AND id = ?');
+            $isAuthRequest->execute([$_SESSION['id'], $shopId]); 
+            $isAuth = $isAuthRequest->fetch(); 
+        }
+
         $formattedResults = [];
         foreach ($movies as $movie) {
-            $formattedResults[] = [
-                "id" => $movie['movie_id'],
-                "path" => $movie['address']
+            $result = [
+                "id" => $movie['movie_id']
             ];
+            if ($isAuth && $isAuth !== false) {
+                $result["path"] = $movie['address'];
+            }
+
+            $formattedResults[] = $result;
         }
 
         echo json_encode($formattedResults);
@@ -412,7 +430,7 @@ class ShopController {
         }
 
         $bdd = GetPDO::getpdo();
-        $query = $bdd->prepare('SELECT id, name, miniature, ville, phone_number, address, date FROM shops WHERE ville = ?');
+        $query = $bdd->prepare('SELECT id, name, miniature, ville, phone_number, address, date, auth FROM shops WHERE ville = ?');
         $query->execute([$ville]);
         $shops = $query->fetchAll(PDO::FETCH_ASSOC);
 
@@ -425,6 +443,7 @@ class ShopController {
                 'ville' => $shop['ville'],
                 'phone_number' => $shop['phone_number'],
                 'address' => $shop['address'],
+                'auth' => $shop['auth'],
                 'date' => date('d-m-Y', strtotime($shop['date']))
             ];
         }

@@ -5,6 +5,7 @@ use Models\GetPDO;
 use TeamTNT\TNTSearch\TNTSearch;
 use Dotenv\Dotenv;
 use Error;
+use PDO;
 
 class Search {
     private $tnt;
@@ -97,6 +98,36 @@ class Search {
 
         $threeMonthsAgo = time() - (3 * 30 * 24 * 60 * 60); // Timestamp pour trois mois
 
+        //check if shop is for this user
+        $isAuth = false;
+        if (isset($_GET['shop']) && $_GET['shop'] !== '' && isset($_SESSION['id'])) 
+        {
+            $isAuthRequest = $bdd->prepare('SELECT auth FROM shops WHERE auth = ? AND id = ?');
+            $isAuthRequest->execute([$_SESSION['id'],$_GET['shop']]); 
+            $isAuth = $isAuthRequest->fetch();
+        }
+
+        // get all movie.id on this ville if ville is selected
+        $allMoviesOnThisTown = [];
+        if (
+            isset($_GET['ville']) && 
+            $_GET['ville'] !== '' && 
+            (!isset($_GET['shop']) || $_GET['shop'] === '')
+            ) {
+
+            // selectionner les movies.id dans movies qui movies.id is dans shop_movies.movie_id et shop_movies.shop_id
+            $allShopOnThisTown = $bdd->prepare('SELECT id FROM shops WHERE ville = ?');
+            $allShopOnThisTown->execute([$_GET['ville']]); 
+            $allShop = $allShopOnThisTown->fetchAll(PDO::FETCH_COLUMN);
+            if ($allShop && !empty($allShop)) {  
+
+                $shopsFound = implode(',',array_map('intval', $allShop));  
+
+                $allMoviesId = $bdd->query('SELECT movie_id FROM shop_movies WHERE shop_id IN (' . $shopsFound . ')'); 
+                $allMoviesOnThisTown = $allMoviesId->fetchAll(PDO::FETCH_COLUMN);  
+            }
+        }
+
         $formattedResults = [];
         foreach ($combinedResults as $result) {
             $contenu = json_decode($result['contenu'], true);
@@ -116,7 +147,15 @@ class Search {
             $userLikeQuery->execute([$result['id'], $userId, $threeMonthsAgo]);
             $userLike = $userLikeQuery->fetchColumn() > 0;
 
-            $formattedResults[] = [
+            // vérifier si ce film se trouve dans cette boutique ou ville
+            $address = false;
+            if (isset($_GET['shop']) && $_GET['shop'] !== '') {  
+                $checkInShop = $bdd->prepare('SELECT address FROM shop_movies WHERE movie_id = ? AND shop_id = ? LIMIT 1');
+                $checkInShop->execute([$result['id'],$_GET['shop']]);
+                $address = $checkInShop->fetch();   
+            }
+ 
+            $returnArray = [
                 'id' => $result['id'],
                 'titre' => $result['titre'],
                 'miniature' => $result['miniature'],
@@ -127,6 +166,22 @@ class Search {
                 'likeCount' => (int) $likeCount,
                 'totLike' => (int) $totalLike
             ];
+
+            if (isset($_GET["shop"])) {
+                $returnArray["match"] = $address ? true : false;
+                if ($address && $isAuth) { 
+                    $returnArray["address"] = $address['address'];
+                }
+            }
+
+            if (
+                isset($_GET["ville"]) && 
+                (!isset($_GET["shop"])) && 
+                $allMoviesOnThisTown) {
+                $returnArray["match"] = array_search($result['id'], $allMoviesOnThisTown) ? true : false;
+            }
+
+            $formattedResults[] = $returnArray;
         }
 
         echo json_encode($formattedResults);
@@ -163,6 +218,36 @@ class Search {
 
         $threeMonthsAgo = time() - (3 * 30 * 24 * 60 * 60); // Timestamp pour trois mois
 
+         //check if shop is for this user
+         $isAuth = false;
+         if (isset($_GET['shop']) && $_GET['shop'] !== '' && isset($_SESSION['id'])) 
+         {
+             $isAuthRequest = $bdd->prepare('SELECT auth FROM shops WHERE auth = ? AND id = ?');
+             $isAuthRequest->execute([$_SESSION['id'],$_GET['shop']]); 
+             $isAuth = $isAuthRequest->fetch();
+         }
+
+         // get all movie.id on this ville if ville is selected
+         $allMoviesOnThisTown = [];
+         if (
+             isset($_GET['ville']) && 
+             $_GET['ville'] !== '' && 
+             (!isset($_GET['shop']) || $_GET['shop'] === '')
+             ) {
+ 
+             // selectionner les movies.id dans movies qui movies.id is dans shop_movies.movie_id et shop_movies.shop_id
+             $allShopOnThisTown = $bdd->prepare('SELECT id FROM shops WHERE ville = ?');
+             $allShopOnThisTown->execute([$_GET['ville']]); 
+             $allShop = $allShopOnThisTown->fetchAll(PDO::FETCH_COLUMN);
+             if ($allShop && !empty($allShop)) {  
+ 
+                 $shopsFound = implode(',',array_map('intval', $allShop));  
+ 
+                 $allMoviesId = $bdd->query('SELECT movie_id FROM shop_movies WHERE shop_id IN (' . $shopsFound . ')'); 
+                 $allMoviesOnThisTown = $allMoviesId->fetchAll(PDO::FETCH_COLUMN);  
+             }
+         }
+
         $formattedResults = [];
         foreach ($filteredResults as $result) {
             $contenu = json_decode($result['contenu'], true);
@@ -182,7 +267,15 @@ class Search {
             $userLikeQuery->execute([$result['id'], $userId, $threeMonthsAgo]);
             $userLike = $userLikeQuery->fetchColumn() > 0;
 
-            $formattedResults[] = [
+            // vérifier si ce film se trouve dans cette boutique ou ville
+            $address = false;
+            if (isset($_GET['shop']) && $_GET['shop'] !== '') {  
+                $checkInShop = $bdd->prepare('SELECT address FROM shop_movies WHERE movie_id = ? AND shop_id = ? LIMIT 1');
+                $checkInShop->execute([$result['id'],$_GET['shop']]);
+                $address = $checkInShop->fetch();   
+            }
+
+            $returnArray = [
                 'id' => $result['id'],
                 'titre' => $result['titre'],
                 'miniature' => $result['miniature'],
@@ -193,6 +286,24 @@ class Search {
                 'likeCount' => (int) $likeCount,
                 'totLike' => (int) $totalLike
             ];
+
+            if (isset($_GET["shop"])) {
+                $returnArray["match"] = $address ? true : false;
+                if ($address && $isAuth) { 
+                    $returnArray["address"] = $address['address'];
+                }
+            }
+
+            if (
+                isset($_GET["ville"]) && 
+                (!isset($_GET["shop"])) && 
+                $allMoviesOnThisTown) {
+                $returnArray["match"] = array_search($result['id'], $allMoviesOnThisTown) ? true : false;
+            }
+
+           
+
+            $formattedResults[] =  $returnArray;
         }
 
         echo json_encode($formattedResults);
