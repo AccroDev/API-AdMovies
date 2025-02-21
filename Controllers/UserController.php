@@ -42,7 +42,7 @@ class UserController {
         ));
         $response = curl_exec($curl);
         curl_close($curl);
-
+        var_dump($response);exit();
         if (!$response || $response === null) {
             echo json_encode(['statut' => false, 'message' => 'Failed to connect to authentication server', 'code' => 500]); 
             return;
@@ -154,7 +154,7 @@ class UserController {
             ),
         ));
         $response = curl_exec($curl);
-        curl_close($curl);
+        curl_close($curl); 
 
         if (!$response || $response === null) {
             echo json_encode(['statut' => false, 'message' => 'Failed to connect to authentication server', 'code' => 500]); 
@@ -189,7 +189,7 @@ class UserController {
             "email" => $userData["email"],
             "accreditation" => $userData["accreditation"], 
             "date" => date("d-m-Y", strtotime($userData["date"])),  
-            "avatar" => $userData["avatar"] && $userData["avatar"] !== '' ? $userData["avatar"] : '/Views/img/avatar/avatar.jpg'
+            "avatar" => $userData["avatar"] && $userData["avatar"] !== '' ? $userData["avatar"] : '/Views/img/avatar/avatar.webp'
         ]);
     }
 
@@ -334,12 +334,12 @@ class UserController {
                 "email" => $userData["email"],
                 "accreditation" => $userData["accreditation"], 
                 "date" => date("d-m-Y", strtotime($userData["date"])) ,  
-                "avatar" => $userData["avatar"] && $userData["avatar"] !== '' ? $userData["avatar"] : '/Views/img/avatar/avatar.jpg'
+                "avatar" => $userData["avatar"] && $userData["avatar"] !== '' ? $userData["avatar"] : '/Views/img/avatar/avatar.webp'
             ]);
             return;
         }
 
-        echo $response; 
+        echo json_encode($response); 
     } 
 }
 ?>

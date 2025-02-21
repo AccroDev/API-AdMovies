@@ -11,9 +11,7 @@ $dotenv->load();
 
 header("Access-Control-Allow-Origin: *");
  
-session_start();  
-
-$_SESSION["id"] = 466;
+session_start();   
 
 // Vérifier les cookies et connecter l'utilisateur automatiquement
 $userController = new UserController();
@@ -24,7 +22,7 @@ $routeur = new Router("Controllers");
 
 error_reporting(E_ALL);
 set_error_handler('Controllers\Errors::error');
-set_exception_handler('Controllers\Errors::error'); /*  */
+set_exception_handler('Controllers\Errors::error'); 
   
 
 $routeur   
@@ -66,6 +64,10 @@ $routeur
     ->post("/api/reset-password","UserController@resetPassword","resetPassword")
     ->post("/api/update-avatar","UserController@updateAvatar","updateAvatar")
     ->post("/api/logout","UserController@logout","logout")
+
+    //download movies
+    ->get("/api/get-download-movie","Download@getDownloadMovie","getDownloadMovie")
+    ->get("/download/[*:slug]-[i:id]","Download@download","download")
 
     //others
     ->get("/api/allVilles","MovieController@getAllVilles","getAllVilles")
