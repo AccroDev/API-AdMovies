@@ -13,10 +13,6 @@ header("Access-Control-Allow-Origin: *");
  
 session_start();   
 
-// Vérifier les cookies et connecter l'utilisateur automatiquement
-$userController = new UserController();
-$userController->autoLogin();
-
 $routeur = new Router("Controllers");
 
 

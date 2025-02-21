@@ -52,11 +52,11 @@
         }
 
         public function download($params)
-        { 
-           
+        {  
 
-            if (!isset($_SESSION["accreditation"]) || $_SESSION["accreditation"] < 2) {
+            if (!isset($_SESSION["accreditation"]) || (isset($_SESSION["accreditation"]) && (int) $_SESSION["accreditation"] < 2)) {
                 http_response_code(403);
+                header('Content-Type: application/json');
                 echo json_encode(['status' => false, 'message' => 'you are not allowed to download', "code" => 403]);
                 return;
             }
@@ -66,6 +66,7 @@
 
             if (!isset($id) || !isset($file)) { 
                 http_response_code(400);
+                header('Content-Type: application/json');
                 echo json_encode(['status' => false, 'message' => 'id and file are required', "code" => 400]);
                 return;
             }
@@ -75,6 +76,7 @@
             
             if (!is_file($path)) {
                 http_response_code(404);
+                header('Content-Type: application/json');
                 echo json_encode(['status' => false, 'message' => 'file not found', "code" => 404, 'data' => [] ]);
                 return;
             }
