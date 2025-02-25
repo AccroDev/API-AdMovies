@@ -140,7 +140,7 @@ class UserController {
 
         $curl = curl_init();
         curl_setopt_array($curl, array(
-            CURLOPT_URL => $_ENV["AUTH_HOST"] .  "/api/login" ,
+            CURLOPT_URL => $_ENV["AUTH_HOST"] .  "/api/other/login" ,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_ENCODING => "",
             CURLOPT_MAXREDIRS => 10,
@@ -188,7 +188,7 @@ class UserController {
             "name" => $userData["name"],
             "email" => $userData["email"],
             "accreditation" => $userData["accreditation"], 
-            "date" => date("d-m-Y", strtotime($userData["date"])),  
+            "date" => date("d-m-Y",(int) $userData["date"]) ,  
             "avatar" => $userData["avatar"] && $userData["avatar"] !== '' ? $userData["avatar"] : '/Views/img/avatar/avatar.webp'
         ]);
     }
@@ -341,5 +341,27 @@ class UserController {
 
         echo json_encode($response); 
     } 
+
+    public function premiumSubscribe() 
+    { 
+        $phone = $_GET["phone"] ?? null;
+        $additionalInfo = $_GET['additionalInfo'] ?? null;
+
+        if (!$phone || $phone === null) {
+            echo json_encode([ 'statut' => false, 'message' => 'Le numéro est requis', 'code' => 400 ]);
+            return;
+        }
+
+        $bdd = GetPDO::getpdo();
+        	
+
+        $reqest = $bdd->prepare('INSERT INTO subscribe (User_id,Phone,AdditionalInfo,Date) VALUES (?,?,?,?)');
+        $reqest->execute([isset($_SESSION["id"]) ? $_SESSION["id"] : null, $phone, $additionalInfo, time()]);
+        
+        $res = $reqest->fetch();
+
+        echo json_encode([ 'statut' => true, 'message' => 'Donnée engregistré', 'code' => 200 ]);
+        return;
+    }
 }
 ?>

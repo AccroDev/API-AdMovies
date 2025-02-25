@@ -7,14 +7,12 @@ require "vendor/autoload.php";
 
 // Charger les variables d'environnement
 $dotenv = Dotenv::createImmutable(__DIR__);
-$dotenv->load();
-
-header("Access-Control-Allow-Origin: *");
+$dotenv->load(); 
  
 session_start();   
 
 $routeur = new Router("Controllers");
-
+ 
 
 error_reporting(E_ALL);
 set_error_handler('Controllers\Errors::error');
@@ -60,12 +58,16 @@ $routeur
     ->post("/api/reset-password","UserController@resetPassword","resetPassword")
     ->post("/api/update-avatar","UserController@updateAvatar","updateAvatar")
     ->post("/api/logout","UserController@logout","logout")
+    ->get("/api/premiumSubscribe","UserController@premiumSubscribe","premiumSubscribe")
 
     //download movies
     ->get("/api/get-download-movie","Download@getDownloadMovie","getDownloadMovie")
     ->get("/download/[*:slug]-[i:id]","Download@download","download")
+    ->get("/watch/[i:id]/[*:slug]","Download@watch","watch")
 
     //others
     ->get("/api/allVilles","MovieController@getAllVilles","getAllVilles")
+    ->post("/api/post-comment","Commentaires@postComment","postComment")
+    ->get("/comments/[i:id]","Commentaires@getComments","getComments")
     ->run();
 ?>
