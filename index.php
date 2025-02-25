@@ -11,6 +11,7 @@ $dotenv->load();
  
 session_start();   
 
+header("Access-Control-Allow: *");
 $routeur = new Router("Controllers");
  
 
@@ -67,6 +68,7 @@ $routeur
 
     //others
     ->get("/api/allVilles","MovieController@getAllVilles","getAllVilles")
+    ->post("/api/getSubscribe","ApiAll@getSubscribe","getSubscribe")
     ->post("/api/post-comment","Commentaires@postComment","postComment")
     ->get("/comments/[i:id]","Commentaires@getComments","getComments")
     ->run();
